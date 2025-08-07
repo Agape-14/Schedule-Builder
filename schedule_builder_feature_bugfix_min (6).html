@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Schedule Duration Builder</title>
+<style>
+body {
+font-family: Arial, sans-serif;
+margin: 0;
+padding: 20px;
+background-color: #f7fafc;
+color: #1a202c;
+}
+h1 {
+text-align: center;
+margin-bottom: 20px;
+}
+h2 {
+margin-top: 30px;
+margin-bottom: 10px;
+}
+.container {
+max-width: 1000px;
+margin: 0 auto;
+background: #ffffff;
+padding: 20px;
+border-radius: 8px;
+box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+table {
+width: 100%;
+border-collapse: collapse;
+}
+th, td {
+padding: 8px;
+border-bottom: 1px solid #e2e8f0;
+text-align: left;
+}
+th {
+background-color: #edf2f7;
+}
+input[type="text"],
+input[type="number"] {
+width: 100%;
+padding: 6px;
+border: 1px solid #cbd5e0;
+border-radius: 4px;
+box-sizing: border-box;
+}
+button {
+padding: 8px 14px;
+margin-right: 8px;
+border: none;
+border-radius: 4px;
+cursor: pointer;
+}
+button.add {
+background-color: #4299e1;
+color: white;
+}
+button.calculate {
+background-color: #48bb78;
+color: white;
+}
+button.remove-row {
+background-color: #f56565;
+color: white;
+}
+.output-table {
+margin-top: 20px;
+overflow-x: auto;
+}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>Schedule Duration Builder</h1>
+<h2>Production Rates (yards per day)</h2>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Rate</th>
+<th>Include</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Scaffolding</td>
+<td>
+<!-- Default rate for scaffolding; user can override -->
+<input id="rate-scaffold" type="number" min="0" value="1000" oninput="calculateSchedule()" />
+</td>
+<td>
+<input id="include-scaffold" type="checkbox" checked onchange="calculateSchedule()" />
+</td>
+</tr>
+<tr>
+<td>Lath</td>
+<td>
+<input id="rate-lath" type="number" min="0" value="180" oninput="calculateSchedule()" />
+</td>
+<td>
+<input id="include-lath" type="checkbox" checked onchange="calculateSchedule()" />
+</td>
+</tr>
+<tr>
+<td>Scratch</td>
+<td>
+<input id="rate-scratch" type="number" min="0" value="1400" oninput="calculateSchedule()" />
+</td>
+<td>
+<input id="include-scratch" type="checkbox" checked onchange="calculateSchedule()" />
+</td>
+</tr>
+<tr>
+<td>Brown</td>
+<td>
+<input id="rate-brown" type="number" min="0" value="700" oninput="calculateSchedule()" />
+</td>
+<td>
+<input id="include-brown" type="checkbox" checked onchange="calculateSchedule()" />
+</td>
+</tr>
+<tr>
+<td>Finish</td>
+<td>
+<!-- Default rate for finish; user can override -->
+<input id="rate-finish" type="number" min="0" value="500" oninput="calculateSchedule()" />
+</td>
+<td>
+<input id="include-finish" type="checkbox" checked onchange="calculateSchedule()" />
+</td>
+</tr>
+</tbody>
+</table>
+<h2>Phase Definitions</h2>
+<table id="phases-table">
+<thead>
+<tr>
+<th>Phase Name</th>
+<th>Total Yards</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody id="phases-body">
+<!-- Dynamic phase rows will be inserted here -->
+</tbody>
+</table>
+<div style="margin-top: 10px;">
+<button type="button" class="add" id="add-phase-btn" onclick="addPhase()">Add Phase</button>
+<button type="button" class="calculate" id="calculate-btn" onclick="calculateSchedule()">Calculate Schedule</button>
+</div>
+<div class="output-table" id="output-section" style="display: none;">
+<h2>Calculated Schedule</h2>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Task</th>
+<th>Quantity (yards)</th>
+<th>Rate (yards/day)</th>
+<th>Duration (days)</th>
+</tr>
+</thead>
+<tbody id="output-body">
+<!-- Results will appear here -->
+</tbody>
+</table>
+</div>
+<!-- Schedule settings to define start dates -->
+<div class="schedule-settings" style="margin-top: 20px;">
+<h2>Schedule Settings</h2>
+<label>
+Scaffolding Start Date:
+<input type="date" id="scaff-start-date" />
+</label>
+<label style="margin-left: 20px;">
+Lath Start Date:
+<input type="date" id="lath-start-date" />
+</label>
+</div>
+<!-- Calendar schedule display -->
+<div class="calendar-table" id="calendar-section" style="display: none; margin-top: 20px;">
+<h2>Calendar Schedule</h2>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Task</th>
+<th>Start Date</th>
+<th>End Date</th>
+</tr>
+</thead>
+<tbody id="calendar-body">
+<!-- Calendar schedule rows inserted here -->
+</tbody>
+</table>
+<!-- Export button appears when a schedule is available -->
+<div style="margin-top: 10px;">
+<button type="button" id="export-btn" class="calculate" style="display: none;" onclick="exportCalendarSchedule()">Export Schedule</button>
+</div>
+</div>
+<p style="font-size: 0.8em; color: #718096; margin-top: 8px;">
+All durations are rounded up to the nearest whole day. Scaffolding
+occurs before lath and finish occurs after brown. Fixed cure periods
+of two and seven calendar days are automatically inserted between
+scratch &rarr; brown and brown &rarr; finish, respectively.
+</p>
+</div>
+<script>
+// removed debug alert
+// Array to store current phase data
+let phases = [];
+// Function to render the phases table rows
+function renderPhases() {
+const tbody = document.getElementById('phases-body');
+tbody.innerHTML = '';
+phases.forEach((phase, index) => {
+const row = document.createElement('tr');
+// Phase name
+const nameTd = document.createElement('td');
+const nameInput = document.createElement('input');
+nameInput.type = 'text';
+nameInput.value = phase.name;
+nameInput.oninput = (e) => {
+phases[index].name = e.target.value;
+calculateSchedule();
+};
+nameTd.appendChild(nameInput);
+row.appendChild(nameTd);
+// Total SF
+const totalTd = document.createElement('td');
+const totalInput = document.createElement('input');
+totalInput.type = 'number';
+totalInput.min = 0;
+totalInput.value = phase.totalYards;
+totalInput.oninput = (e) => {
+phases[index].totalYards = parseFloat(e.target.value) || 0;
+calculateSchedule();
+};
+totalTd.appendChild(totalInput);
+row.appendChild(totalTd);
+// Remove button
+const actionTd = document.createElement('td');
+if (index > 0) {
+const removeBtn = document.createElement('button');
+removeBtn.textContent = 'Remove';
+removeBtn.className = 'remove-row';
+removeBtn.onclick = () => {
+phases.splice(index, 1);
+renderPhases();
+};
+actionTd.appendChild(removeBtn);
+}
+row.appendChild(actionTd);
+tbody.appendChild(row);
+});
+// After rendering all phase rows, recalculate schedule to reflect any changes
+calculateSchedule();
+}
+// Initialize with one phase
+function init() {
+// Initialize the default phases
+phases = [
+{
+name: 'Phase 1',
+totalYards: 0
+}
+];
+renderPhases();
+// Attach button handlers during initialization
+const addButton = document.getElementById('add-phase-btn');
+if (addButton) {
+addButton.onclick = addPhase;
+}
+const calculateButton = document.getElementById('calculate-btn');
+if (calculateButton) {
+calculateButton.onclick = calculateSchedule;
+}
+// Initially render the schedule so the output table is visible when the page loads
+calculateSchedule();
+}
+// Add a new blank phase (invoked via onclick on the Add Phase button)
+function addPhase() {
+const nextNum = phases.length + 1;
+phases.push({
+name: 'Phase ' + nextNum,
+totalYards: 0
+});
+renderPhases();
+}
+// Calculate schedule when button clicked
+// Calculate schedule for all phases and populate the results table
+function calculateSchedule() {
+// Perform calculations for all phases and populate the results table
+const rateScaff = parseFloat(document.getElementById('rate-scaffold').value) || 0;
+const rateLath = parseFloat(document.getElementById('rate-lath').value) || 0;
+const rateScratch = parseFloat(document.getElementById('rate-scratch').value) || 0;
+const rateBrown = parseFloat(document.getElementById('rate-brown').value) || 0;
+const rateFinish = parseFloat(document.getElementById('rate-finish').value) || 0;
+const outputBody = document.getElementById('output-body');
+outputBody.innerHTML = '';
+// Determine which tasks are included based on checkboxes
+const includeScaff = document.getElementById('include-scaffold')?.checked;
+const includeLath = document.getElementById('include-lath')?.checked;
+const includeScratch = document.getElementById('include-scratch')?.checked;
+const includeBrown = document.getElementById('include-brown')?.checked;
+const includeFinish = document.getElementById('include-finish')?.checked;
+phases.forEach((phase) => {
+const total = parseFloat(phase.totalYards) || 0;
+const qty = total;
+// Compute durations for each main task
+const daysSc = rateScaff > 0 ? Math.ceil(qty / rateScaff) : 0;
+const daysLath = rateLath > 0 ? Math.ceil(qty / rateLath) : 0;
+const daysScratch = rateScratch > 0 ? Math.ceil(qty / rateScratch) : 0;
+const daysBrown = rateBrown > 0 ? Math.ceil(qty / rateBrown) : 0;
+const daysFinish = rateFinish > 0 ? Math.ceil(qty / rateFinish) : 0;
+// Build a list of tasks to display based on inclusion flags
+const tasks = [];
+if (includeScaff && daysSc > 0) {
+tasks.push(['Scaffolding', qty, rateScaff, daysSc]);
+}
+if (includeLath && daysLath > 0) {
+tasks.push(['Lath', qty, rateLath, daysLath]);
+}
+if (includeScratch && daysScratch > 0) {
+tasks.push(['Scratch', qty, rateScratch, daysScratch]);
+// Cure after scratch is always 2 calendar days when scratch is included
+tasks.push(['Cure (after Scratch)', null, null, 2]);
+}
+if (includeBrown && daysBrown > 0) {
+// Brown should follow either scratch (if included) or lath
+tasks.push(['Brown', qty, rateBrown, daysBrown]);
+// Cure after brown is always 7 calendar days when brown is included
+tasks.push(['Cure (after Brown)', null, null, 7]);
+}
+if (includeFinish && daysFinish > 0) {
+tasks.push(['Finish', qty, rateFinish, daysFinish]);
+}
+tasks.forEach(([taskName, quantity, rate, days]) => {
+const tr = document.createElement('tr');
+const quantityText = (quantity !== null && quantity !== undefined) ? quantity.toFixed(2) : '-';
+const rateText = (rate !== null && rate !== undefined) ? rate.toLocaleString() : '-';
+const daysText = days.toString();
+const cells = [
+phase.name,
+taskName,
+quantityText,
+rateText,
+daysText,
+];
+cells.forEach((text) => {
+const td = document.createElement('td');
+td.textContent = text;
+tr.appendChild(td);
+});
+outputBody.appendChild(tr);
+});
+});
+document.getElementById('output-section').style.display = 'block';
+// After computing man-day durations, build the calendar schedule
+buildCalendarSchedule();
+}
+/**
+* Utility: return a Date object representing the next workday (Mon‑Fri).
+* If the supplied date falls on a weekend, advance to the next Monday.
+* The original date object is not mutated.
+* @param {Date} date
+* @returns {Date}
+*/
+function nextWorkday(date) {
+    /*
+     * Return a date object representing the next workday (Monday–Friday).  To
+     * avoid timezone‑induced off‑by‑one errors (where ISO strings are
+     * interpreted as UTC and then shifted when converted to local time), we
+     * construct a new date using only the year, month and day from the input.
+     * We then increment this day until it falls on a weekday.
+     */
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    while (d.getDay() === 0 || d.getDay() === 6) {
+        // 0 = Sunday, 6 = Saturday
+        d.setDate(d.getDate() + 1);
+    }
+    return d;
+}
+/**
+* Utility: add a number of work days (Mon‑Fri) to a date.
+* Returns a new Date. Does not count the starting day itself.
+* For example, addWorkDays(date, 1) gives the next workday.
+* @param {Date} date
+* @param {number} days
+* @returns {Date}
+*/
+function addWorkDays(date, days) {
+    /*
+     * Add a number of workdays (Monday–Friday) to a date.  We base the
+     * calculation on a date created from the year, month and day to
+     * prevent timezone offsets from shifting the day.
+     */
+    let d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    let count = 0;
+    while (count < days) {
+        d.setDate(d.getDate() + 1);
+        const dow = d.getDay();
+        if (dow !== 0 && dow !== 6) {
+            count++;
+        }
+    }
+    return d;
+}
+/**
+* Utility: add a number of calendar days (including weekends) to a date.
+* Returns a new Date. Does not count the starting day itself.
+* @param {Date} date
+* @param {number} days
+* @returns {Date}
+*/
+function addCalendarDays(date, days) {
+    /*
+     * Add a number of calendar days to a date.  As with the other date
+     * functions, we use a locally‑constructed date (year, month, day) to
+     * prevent UTC parsing from shifting the day when converting to local
+     * time.
+     */
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+}
+/**
+* Build the calendar schedule for all phases using the entered start dates
+* and computed man‑day durations. Lath activities cannot overlap across
+* phases; scaffolding is scheduled sequentially across phases to avoid
+* overlap. Other tasks (scratch, brown, finish) follow sequentially within
+* each phase, but may overlap with the same tasks in other phases.
+*/
+function buildCalendarSchedule() {
+const calendarBody = document.getElementById('calendar-body');
+// Clear previous results
+calendarBody.innerHTML = '';
+// Parse the start dates from inputs
+const scaffInput = document.getElementById('scaff-start-date').value;
+const lathInput = document.getElementById('lath-start-date').value;
+if (!scaffInput || !lathInput) {
+// Hide the calendar schedule if either date is missing
+document.getElementById('calendar-section').style.display = 'none';
+// Also hide the export button since there is no schedule
+const exportBtn = document.getElementById('export-btn');
+if (exportBtn) {
+exportBtn.style.display = 'none';
+}
+return;
+}
+    // Parse the input dates as local dates (year, month, day) to avoid
+    // unintended timezone shifts.  See also nextWorkday/addCalendarDays
+    const [scY, scM, scD] = scaffInput.split('-').map(Number);
+    const [laY, laM, laD] = lathInput.split('-').map(Number);
+    const globalScaffStart = nextWorkday(new Date(scY, scM - 1, scD));
+    const globalLathStart = nextWorkday(new Date(laY, laM - 1, laD));
+// Grab the current rates again in case the user changed them
+const rateScaff = parseFloat(document.getElementById('rate-scaffold').value) || 0;
+const rateLath = parseFloat(document.getElementById('rate-lath').value) || 0;
+const rateScratch = parseFloat(document.getElementById('rate-scratch').value) || 0;
+const rateBrown = parseFloat(document.getElementById('rate-brown').value) || 0;
+const rateFinish = parseFloat(document.getElementById('rate-finish').value) || 0;
+// Initialize cursors for sequential tasks. These cursors advance regardless
+// of whether the corresponding tasks are included to ensure sequential
+// scheduling across phases.
+let scaffCursor = new Date(globalScaffStart.getTime());
+let lathCursor = new Date(globalLathStart.getTime());
+// Determine which tasks are included based on checkboxes
+const includeScaff = document.getElementById('include-scaffold')?.checked;
+const includeLath = document.getElementById('include-lath')?.checked;
+const includeScratch = document.getElementById('include-scratch')?.checked;
+const includeBrown = document.getElementById('include-brown')?.checked;
+const includeFinish = document.getElementById('include-finish')?.checked;
+// Loop through each phase to build schedule entries
+phases.forEach((phase) => {
+const total = parseFloat(phase.totalYards) || 0;
+const qty = total;
+// Compute durations (rounded up to whole days) for each task
+const daysSc = rateScaff > 0 ? Math.ceil(qty / rateScaff) : 0;
+const daysLath = rateLath > 0 ? Math.ceil(qty / rateLath) : 0;
+const daysScratch = rateScratch > 0 ? Math.ceil(qty / rateScratch) : 0;
+const daysBrown = rateBrown > 0 ? Math.ceil(qty / rateBrown) : 0;
+const daysFinish = rateFinish > 0 ? Math.ceil(qty / rateFinish) : 0;
+// ===== Scaffolding =====
+// Schedule scaffolding across phases sequentially. Update scaffCursor
+// regardless of inclusion so that subsequent phases respect sequence.
+let scaffStart = null;
+let scaffEnd = null;
+if (daysSc > 0) {
+const startCandidate = new Date(Math.max(scaffCursor.getTime(), globalScaffStart.getTime()));
+scaffStart = nextWorkday(startCandidate);
+scaffEnd = addWorkDays(scaffStart, daysSc - 1);
+// Advance the scaffold cursor by the number of workdays required
+scaffCursor = addWorkDays(scaffStart, daysSc);
+// Only add to calendar if included
+if (includeScaff) {
+calendarBody.appendChild(createCalendarRow(phase.name, 'Scaffolding', scaffStart, scaffEnd));
+}
+}
+// ===== Lath =====
+// Schedule lath across phases sequentially. Update lathCursor regardless of inclusion.
+let lathStart = null;
+let lathEnd = null;
+if (daysLath > 0) {
+const startCandidate = new Date(Math.max(lathCursor.getTime(), globalLathStart.getTime()));
+lathStart = nextWorkday(startCandidate);
+lathEnd = addWorkDays(lathStart, daysLath - 1);
+// Advance lath cursor to day after lath finishes
+lathCursor = addWorkDays(lathStart, daysLath);
+// Only add to calendar if included
+if (includeLath) {
+calendarBody.appendChild(createCalendarRow(phase.name, 'Lath', lathStart, lathEnd));
+}
+}
+// Track the end of the last preparatory task (lath) for scheduling subsequent tasks
+// If lath is not scheduled (no yards or not included), lathEnd may be null.
+// Use lathEnd if available; otherwise fallback to lathStart for zero duration.
+let prepEnd = null;
+if (daysLath > 0) {
+prepEnd = lathEnd;
+} else if (lathStart) {
+prepEnd = lathStart;
+} else {
+// If there is no lath work at all, prepEnd should be the scaffolding end or global lath start
+if (scaffEnd) {
+prepEnd = scaffEnd;
+} else {
+prepEnd = globalLathStart;
+}
+}
+    // ===== Scratch and Cure 1 =====
+    // Set the initial stage cursor to the end of the preparatory phase (lath or scaff)
+    let stageCursor = prepEnd;
+    let scratchEnd = null;
+    let cure1End = null;
+    if (includeScratch && daysScratch > 0) {
+        // Scratch starts on the next workday after the preparatory phase
+        const scratchStart = nextWorkday(addCalendarDays(stageCursor, 1));
+        scratchEnd = addWorkDays(scratchStart, daysScratch - 1);
+        // Append scratch if included
+        calendarBody.appendChild(createCalendarRow(phase.name, 'Scratch', scratchStart, scratchEnd));
+        /*
+         * The scratch cure no longer waits for all scratch work to finish.  It
+         * begins after the first day of scratch is completed (i.e., the day
+         * following the scratch start) and lasts for two calendar days.  This
+         * allows brown work to begin once the two‑day cure has finished,
+         * regardless of any remaining scratch work.
+         */
+        const cure1Start = addCalendarDays(scratchStart, 1);
+        cure1End = addCalendarDays(cure1Start, 1);
+        calendarBody.appendChild(createCalendarRow(phase.name, 'Cure (after Scratch)', cure1Start, cure1End));
+        // Set the stage cursor to the end of the scratch cure so brown starts after it
+        stageCursor = cure1End;
+    } else {
+        // If scratch is not included, stageCursor should still be prepEnd for brown
+        stageCursor = prepEnd;
+    }
+    // ===== Brown and Cure 2 =====
+    let brownEnd = null;
+    let cure2End = null;
+    if (includeBrown && daysBrown > 0) {
+        // Brown begins on the next workday after the scratch cure (stageCursor)
+        const brownStart = nextWorkday(addCalendarDays(stageCursor, 1));
+        brownEnd = addWorkDays(brownStart, daysBrown - 1);
+        calendarBody.appendChild(createCalendarRow(phase.name, 'Brown', brownStart, brownEnd));
+        /*
+         * The brown cure also begins after the first day of brown is completed.
+         * It lasts seven calendar days (beginning the day following the brown start).
+         */
+        const cure2Start = addCalendarDays(brownStart, 1);
+        cure2End = addCalendarDays(cure2Start, 6);
+        calendarBody.appendChild(createCalendarRow(phase.name, 'Cure (after Brown)', cure2Start, cure2End));
+        // Set the stage cursor to the end of the brown cure for the finish coat
+        stageCursor = cure2End;
+    }
+    // ===== Finish =====
+    if (includeFinish && daysFinish > 0) {
+        /*
+         * Always schedule the finish coat to start on the first workday
+         * following the appropriate base date.  If brown work is included,
+         * the base date for the finish coat is the end of the brown cure
+         * (cure2End).  If there is no brown work but a scratch (with its cure)
+         * is included, the base date is the end of the scratch cure (cure1End).
+         * Otherwise, the finish starts after the preparatory phase (lath/scaff).
+         */
+        let finishBase;
+        if (includeBrown && daysBrown > 0 && cure2End) {
+            finishBase = cure2End;
+        } else if (includeScratch && daysScratch > 0 && cure1End) {
+            finishBase = cure1End;
+        } else {
+            finishBase = prepEnd || stageCursor;
+        }
+        // Move forward one calendar day from the base, then find the next workday
+        const finishStart = nextWorkday(addCalendarDays(finishBase, 1));
+        const finishEnd = addWorkDays(finishStart, daysFinish - 1);
+        calendarBody.appendChild(createCalendarRow(phase.name, 'Finish', finishStart, finishEnd));
+        // Not updating stageCursor here as finish is the final task
+    }
+});
+// Show the calendar section and export button
+document.getElementById('calendar-section').style.display = 'block';
+const exportBtn = document.getElementById('export-btn');
+if (exportBtn) {
+exportBtn.style.display = 'inline-block';
+}
+}
+/**
+* Helper function to create a calendar schedule table row.
+* Dates are formatted as YYYY‑MM‑DD.
+* @param {string} phaseName
+* @param {string} taskName
+* @param {Date} startDate
+* @param {Date} endDate
+* @returns {HTMLTableRowElement}
+*/
+function createCalendarRow(phaseName, taskName, startDate, endDate) {
+const tr = document.createElement('tr');
+const startStr = startDate ? startDate.toISOString().split('T')[0] : '-';
+const endStr = endDate ? endDate.toISOString().split('T')[0] : '-';
+const cells = [phaseName, taskName, startStr, endStr];
+cells.forEach((text) => {
+const td = document.createElement('td');
+td.textContent = text;
+tr.appendChild(td);
+});
+return tr;
+}
+/**
+* Export the calendar schedule currently displayed in the table as a CSV file.
+* Each line of the CSV will contain Phase, Task, Start Date, End Date. The
+* function constructs a CSV string, creates a Blob from it and triggers
+* a download in the browser.
+*/
+function exportCalendarSchedule() {
+const tableBody = document.getElementById('calendar-body');
+if (!tableBody) return;
+const rows = Array.from(tableBody.querySelectorAll('tr'));
+// Build a mapping of phases to tasks with start and end dates
+const scheduleMap = {};
+const phaseOrder = [];
+const taskOrder = [];
+rows.forEach((row) => {
+const cells = Array.from(row.querySelectorAll('td')).map((td) => td.textContent);
+// cells: [phase, task, start, end]
+const [phase, task, start, end] = cells;
+if (!scheduleMap[phase]) {
+scheduleMap[phase] = {};
+phaseOrder.push(phase);
+}
+if (!taskOrder.includes(task)) taskOrder.push(task);
+scheduleMap[phase][task] = { start, end };
+});
+// Determine a sensible order of tasks for export
+// We use a fixed order based on expected tasks
+const defaultTaskOrder = [
+'Scaffolding',
+'Lath',
+'Scratch',
+'Cure (after Scratch)',
+'Brown',
+'Cure (after Brown)',
+'Finish'
+];
+// Merge default order with any additional tasks found
+const finalTaskOrder = defaultTaskOrder.concat(taskOrder.filter((t) => !defaultTaskOrder.includes(t)));
+// Header row: Phase plus start/end for each task
+const header = ['Phase'];
+finalTaskOrder.forEach((task) => {
+header.push(`${task} Start`);
+header.push(`${task} End`);
+});
+const data = [header];
+// Use the original phase ordering from phases array to preserve user order
+const phasesList = phases.map((p) => p.name);
+phasesList.forEach((phase) => {
+if (!scheduleMap[phase]) return;
+const row = [phase];
+finalTaskOrder.forEach((task) => {
+const entry = scheduleMap[phase] && scheduleMap[phase][task];
+row.push(entry ? entry.start : '');
+row.push(entry ? entry.end : '');
+});
+data.push(row);
+});
+// Convert data to CSV string with proper escaping
+const csvContent = data
+.map((row) => row
+.map((item) => '"' + String(item).replace(/"/g, '""') + '"')
+.join(','))
+.join('\n');
+const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+const url = URL.createObjectURL(blob);
+const link = document.createElement('a');
+link.setAttribute('href', url);
+link.setAttribute('download', 'schedule.csv');
+document.body.appendChild(link);
+link.click();
+document.body.removeChild(link);
+URL.revokeObjectURL(url);
+}
+// Run initialization on page load
+window.onload = init;
+</script>
+</body>
+</html>
